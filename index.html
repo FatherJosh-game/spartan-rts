@@ -457,7 +457,8 @@ function moveTo(u,x,y,dt,arrive){let dd=Math.hypot(x-u.x,y-u.y);if(dd<=arrive+1)
   if(need&&pathBudget>0){pathBudget--;u.path=findPath(u.x,u.y,x,y);u.pv=gridVer;u.pgx=x;u.pgy=y;u.pt=G.t;u.stuck=0;}
   if(u.path){while(u.path.length&&Math.hypot(u.path[0].x-u.x,u.path[0].y-u.y)<8)u.path.shift();if(u.path.length){wx=u.path[0].x;wy=u.path[0].y;}}
  }else u.path=null;
- if(u.stuck>1.6&&dd<70){u.path=null;u.stuck=0;return true;}
+ if(u.stuck>1.6&&dd<70&&!(u.saT>0)){u.path=null;u.stuck=0;return true;}
+ {const q=saSteer(u,wx,wy,dd);wx=q.x;wy=q.y;saStuck(u,np);}/* STEP ASIDE v1 */
  const dx=wx-u.x,dy=wy-u.y,d2=Math.hypot(dx,dy)||1;
  const sp=Math.min(ST(u).spd,u.spdCap||1e9);const st=Math.min(d2,sp*dt);if(u.kind==='cavalry')u.runD=(u.runD||0)+st;
  u.x+=dx/d2*st;u.y+=dy/d2*st;u.face=Math.atan2(dy,dx);u.moving=true;u.want=st;return false;}
@@ -600,6 +601,7 @@ function separate(){const U=G.units,n=U.length;
  for(let i=0;i<n;i++){const a=U[i];for(let j=i+1;j<n;j++){const b=U[j];if(a.st==='gather'&&b.st==='gather'&&a.team===b.team)continue;const both=a.settled&&b.settled&&a.team===b.team,dx=b.x-a.x,dy=b.y-a.y,rr=both?a.vr+b.vr+SEP_GAP:a.r+b.r-2;
   if(dx>rr||dx<-rr||dy>rr||dy<-rr)continue;const d2=dx*dx+dy*dy;if(d2>=rr*rr)continue;
   const d=Math.sqrt(d2)||(0.01+((a.id*7+b.id)%5)*0.002),o=(rr-d)*(both?0.25:a.working&&b.working?0.1:0.5);
+  if(saPair(a,b,dx,dy,d,o))continue;/* STEP ASIDE v1 */
   const ax=a.moving&&!b.moving?0.7:b.moving&&!a.moving?0.3:0.5;
   a.x-=dx/d*o*ax;a.y-=dy/d*o*ax;b.x+=dx/d*o*(1-ax);b.y+=dy/d*o*(1-ax);}}
  for(const u of U){bldPush(u);bldPush(u);/* STUCK FIX v1 (was: push along the shorter axis, even into the next building) */
@@ -861,11 +863,98 @@ function updForms(dt){if(!G.forms||!G.forms.length)return;
    // the block slow-walks while someone trails (pace set by the furthest-behind member), full pace once everyone is in
    const pace=behind<40?1:Math.max(0.2,1-(behind-40)/160);F.ph=pace<1?'wait':'march';const mv=Math.min(d,F.spd*pace*dt);F.cx+=tfx*mv;F.cy+=tfy*mv;
    if(F.opt.scan&&(F.scanT-=dt)<=0){F.scanT=0.4;const e=findEnemyAt(F.cx+F.fx*50,F.cy+F.fy*50,F.team,F.opt.scan,false);if(e){releaseForm(F,'enemy');continue;}}}
-  for(const u of al){const q=tg.get(u)||slotPos(F,F.slots.get(u));u.tx=q.x;u.ty=q.y;const dd=Math.hypot(u.x-q.x,u.y-q.y);
+  for(const u of al){const q=tg.get(u)||slotPos(F,F.slots.get(u));u.tx=q.x;u.ty=q.y;saSqueeze(F,u);/* STEP ASIDE v1 */const dd=Math.hypot(u.x-q.x,u.y-q.y);
    // in place (or waiting ahead): walk at the block's pace; out of position behind: catch up at full speed
    u.spdCap=F.ph==='form'?0:(q.ahead||dd<16?F.spd*1.1:0);}}
  G.forms=G.forms.filter(F=>!F.done);}
-function step(dt){if(!G)return;G.t+=dt;pathBudget=10;G.dt=dt;if(gridDirty)rebuildGrid();
+/* ==== STEP ASIDE v1 BEGIN ==== (Josh: "units get stuck on themselves when trying to form up ... step aside")
+ 1) A unit standing still (idle, or already on its formation slot) that a moving friend bumps slides sideways out of the mover's
+    path instead of being shoved along it, then walks back to where it stood once the way is clear (walking back never makes
+    others step aside, and a unit walks back at most twice per stop, so there is no endless shuffle).
+ 2) A moving unit steers round a slower or stopped friend just ahead of it.
+ 3) If it is still blocked by a friend for 0.5s it takes a short sideways step; two friends that want each other's spots swap them.
+ 4) Group-move slots are handed out by position (front units take the front row, left units the left side), so paths don't cross.
+ Only same-side pairs are affected: fighting and pushing against enemies feel the same as before. */
+const SA={cell:48,look:16,yield:0.85,back:0.4,cap:5,maxOff:20};let saGrid=null;
+function saBuild(){saGrid=new Map();for(const u of G.units){if(u.dead)continue;const k=((u.x/SA.cell)|0)*4096+((u.y/SA.cell)|0);let c=saGrid.get(k);if(!c)saGrid.set(k,c=[]);c.push(u);}}
+function saNear(x,y,f){if(!saGrid)return;const cx=(x/SA.cell)|0,cy=(y/SA.cell)|0;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){const c=saGrid.get((cx+i)*4096+cy+j);if(c)for(const o of c)f(o);}}
+// (1) called from separate() for each overlapping same-side pair; returns true when it handled the push
+function saPair(a,b,dx,dy,d,o){if(a.team!==b.team||a.moving===b.moving)return false;const m=a.moving?a:b,s=a.moving?b:a;
+ if(m.saRet||s.working||s.st==='gather'||(s.st==='attack'&&!s.settled)||s.stun>0)return false;
+ const fx=Math.cos(m.face||0),fy=Math.sin(m.face||0);let rx=s.x-m.x,ry=s.y-m.y;const along=rx*fx+ry*fy;if(along<-2)return false; // only friends in front of the mover
+ let side=-rx*fy+ry*fx;side=Math.abs(side)<0.5?((s.id&1)?1:-1):Math.sign(side);let nx=-fy*side,ny=fx*side;const tot=o*1.25;if(inBld(s.x+nx*(s.r+6),s.y+ny*(s.r+6),s.r)){nx=-nx;ny=-ny;if(inBld(s.x+nx*(s.r+6),s.y+ny*(s.r+6),s.r))return false;} // no room beside it (a wall): plain push
+ if(s.restX!==undefined&&Math.hypot(s.x-s.restX,s.y-s.restY)>SA.maxOff)return false; // already a body-width aside: plain push from here
+ if(s.saG!==G.t){s.saG=G.t;s.saAcc=0;}if((s.saAcc+=tot*SA.yield)>SA.cap)return false; // at most a few px of sidestep per tick: never a jolt
+ if(s.st==='idle'&&s.restX===undefined&&(s.saRetN||0)<2){s.restX=s.x;s.restY=s.y;}s.yieldT=SA.back;
+ s.x+=nx*tot*SA.yield+(rx/d)*tot*0.1;s.y+=ny*tot*SA.yield+(ry/d)*tot*0.1;m.x-=(rx/d)*tot*0.15;m.y-=(ry/d)*tot*0.15;return true;}
+// (2)+(3) called from moveTo before the step: returns the (possibly bent) waypoint
+function saSteer(u,wx,wy,dd){const dx=wx-u.x,dy=wy-u.y,L=Math.hypot(dx,dy)||1,fx=dx/L,fy=dy/L;let blk=null,bAlong=1e9,bSide=0;
+ saNear(u.x,u.y,o=>{if(o===u||o.team!==u.team)return;const rx=o.x-u.x,ry=o.y-u.y,along=rx*fx+ry*fy,rr=u.r+o.r;if(along<=0||along>rr+SA.look)return;
+  const lat=-rx*fy+ry*fx;if(Math.abs(lat)>rr+1)return;if(o.moving&&(o.want||0)>=(u.want||0)*0.7&&((o.face!==undefined)&&(Math.cos(o.face)*fx+Math.sin(o.face)*fy)>0.5))return; // a friend walking the same way at our pace: just follow
+  if(along<bAlong){bAlong=along;blk=o;bSide=lat;}});
+ u.saBlk=blk;
+ if((u.saT||0)>0){u.saT-=G.dt;const k=1.4;return{x:u.x+(fx+(-fy)*u.saS*k)*20,y:u.y+(fy+fx*u.saS*k)*20};}
+ if(!blk||dd<Math.max(8,blk.r))return{x:wx,y:wy};
+ // swap: two friends that want each other's spot
+ if(blk.moving&&blk.st===u.st&&(u.st==='move'||u.st==='form')&&Math.hypot(blk.tx-u.x,blk.ty-u.y)<24&&Math.hypot(u.tx-blk.x,u.ty-blk.y)<24&&(u.form===blk.form)){
+  if(u.form&&u.form.slots){const S=u.form.slots,a=S.get(u),b=S.get(blk);if(a&&b){S.set(u,b);S.set(blk,a);}}else{const t=[u.tx,u.ty];u.tx=blk.tx;u.ty=blk.ty;blk.tx=t[0];blk.ty=t[1];}
+  u.saSwap=(u.saSwap||0)+1;return{x:wx,y:wy};}
+ const side=Math.abs(bSide)<1?((u.id&1)?1:-1):-Math.sign(bSide),rr=u.r+blk.r,k=Math.max(0,1-(bAlong-rr*0.6)/(rr*0.4+SA.look))*1.1;
+ if(k<=0)return{x:wx,y:wy};let sd=side;if(inBld(u.x-fy*sd*(u.r+8),u.y+fx*sd*(u.r+8),u.r)){sd=-sd;if(inBld(u.x-fy*sd*(u.r+8),u.y+fx*sd*(u.r+8),u.r))return{x:wx,y:wy};}
+ const tx=fx+(-fy)*sd*k,ty=fy+fx*sd*k;return{x:u.x+tx*20,y:u.y+ty*20};}
+// (3) stuck on a friend: short sideways step
+function saStuck(u,np){if(np>0.5&&u.saBlk&&!(u.saT>0)&&G.t-(u.saLast||0)>0.9){u.saLast=G.t;u.saT=0.45;const b=u.saBlk,fx=Math.cos(u.face||0),fy=Math.sin(u.face||0),lat=-(b.x-u.x)*fy+(b.y-u.y)*fx;u.saS=Math.abs(lat)<1?((u.id&1)?1:-1):-Math.sign(lat);
+  const free=sd=>!inBld(u.x-fy*sd*(u.r+8),u.y+fx*sd*(u.r+8),u.r);if(!free(u.saS)){if(free(-u.saS))u.saS=-u.saS;else{u.saT=0;return false;}} // never step into a wall
+  u.saSteps=(u.saSteps||0)+1;return true;}return false;}
+// (1b) units that stepped aside walk back to where they stood once nobody is pushing through
+function saTick(dt){saBuild();for(const u of G.units){if(u.restX===undefined)continue;
+ if(u.dead||(u.st!=='idle'&&!u.saRet)){u.restX=undefined;u.saRet=false;continue;}
+ if(u.saRet){if(u.st==='idle'){u.saRet=false;u.restX=undefined;}continue;}
+ if((u.yieldT-=dt)>0)continue;const dr=Math.hypot(u.x-u.restX,u.y-u.restY);if(dr<10){u.restX=undefined;continue;}
+ u.st='move';u.soft=true;u.tx=u.restX;u.ty=u.restY;u.saRet=true;u.saRetN=(u.saRetN||0)+1;u.scanT=0.2;}
+ for(const u of G.units)if(u.saRetN&&u.st!=='idle'&&!u.saRet)u.saRetN=0;} // walking back never makes others step aside, and at most twice per stop
+// (4) group-move slots by position, per unit type, so nobody walks through the group to reach their spot
+function saAssign(list,fx,fy){const groups=new Map();for(const u of list){const g=u.kind==='hoplite'?0:u.kind==='cavalry'?1:2;(groups.get(g)||groups.set(g,[]).get(g)).push(u);}
+ const pf=(x,y)=>x*fx+y*fy,pr=(x,y)=>-x*fy+y*fx;
+ for(const us of groups.values()){if(us.length<2)continue;const sl=us.map(u=>({x:u.tx,y:u.ty}));sl.sort((a,b)=>pf(b.x,b.y)-pf(a.x,a.y));
+  const rows=[];for(const q of sl){const r=rows[rows.length-1];if(r&&Math.abs(pf(r[0].x,r[0].y)-pf(q.x,q.y))<6)r.push(q);else rows.push([q]);}
+  const ord=us.slice().sort((a,b)=>pf(b.x,b.y)-pf(a.x,a.y));let i=0;
+  for(const r of rows){const chunk=ord.slice(i,i+r.length).sort((a,b)=>pr(a.x,a.y)-pr(b.x,b.y));i+=r.length;r.sort((a,b)=>pr(a.x,a.y)-pr(b.x,b.y));chunk.forEach((u,j)=>{u.tx=r[j].x;u.ty=r[j].y;});}}}
+// (5) formation squeezing through a gap: a slot that lands inside a building moves in toward the block's centre line (or falls back)
+function saSqueeze(F,u){if(!inBld(u.tx,u.ty,u.r+2))return;const rx=u.tx-F.cx,ry=u.ty-F.cy,f=rx*F.fx+ry*F.fy,l=-rx*F.fy+ry*F.fx;
+ for(let back=0;back<=150;back+=25)for(const k of [0.7,0.45,0.25]){const x=F.cx+F.fx*(f-back)-F.fy*l*k,y=F.cy+F.fy*(f-back)+F.fx*l*k;if(!inBld(x,y,u.r+2)){u.tx=x;u.ty=y;u.saSq=(u.saSq||0)+1;return;}}}
+/* ==== STEP ASIDE v1 END ==== */
+/* ==== ARCHER GUARD v1 BEGIN ==== (Josh: "the spears learn to protect the archers")
+ When enemy cavalry attacks or closes on a friendly Archer, up to 3 nearby Hoplites peel off to intercept it, then go back to what
+ they were doing (their spot, attack-move, or their AI formation). Eligible: Hoplites within 170px of the Archer that are idle,
+ on a soft/auto move, attack-moving, or auto-fighting something else. Never: Hold stance, a player's direct move/formation move,
+ or a player-ordered attack. Phalanx Hoplites only step out if the horse is within 70px. Applies to both sides. */
+const GUARD={r:170,threat:75,max:3,leash:240,phxR:70,every:0.2};
+function guardOK(h){if(h.dead||h.kind!=='hoplite'||h.hold||h.guardOf||(h.stun>0))return false;
+ if(h.st==='form')return h.team===1||!!G.watch;if(h.st==='move')return !!h.soft;if(h.st==='idle'||h.st==='amove')return true;
+ if(h.st==='attack')return !h.cmd&&(h.auto||h.amove||!h.tgt||h.tgt.isB)&&!(h.tgt&&h.tgt.kind==='cavalry');return false;}
+function guardRelease(h){const c=h.guardOf,P=h.gPrev||{};h.guardOf=null;h.gArch=null;h.gPrev=null;if(h.dead)return;
+ if(h.tgt===c||!h.tgt||h.tgt.dead){h.tgt=null;h.auto=false;h.cmd=false;
+  if(P.st==='amove'){h.st='amove';h.amove=true;h.tx=P.tx;h.ty=P.ty;}
+  else if(P.st==='form'&&h.form&&!h.form.done){h.st='form';}
+  else if(P.st==='move'){h.st='move';h.soft=true;h.tx=P.tx;h.ty=P.ty;}
+  else{h.st='move';h.soft=true;h.tx=P.hx;h.ty=P.hy;h.scanT=0.6;}h.wave=P.wave;}}
+function guardTick(dt){if((G.guardT=(G.guardT||0)-dt)>0)return;G.guardT=GUARD.every;
+ for(const h of G.units){if(!h.guardOf)continue;const c=h.guardOf,a=h.gArch,P=h.gPrev||{};
+  if(h.dead||c.dead||h.tgt!==c||!a||a.dead||Math.hypot(c.x-a.x,c.y-a.y)>GUARD.threat*2.6||Math.hypot(h.x-P.hx,h.y-P.hy)>GUARD.leash)guardRelease(h);}
+ const resp=new Map();for(const h of G.units)if(h.guardOf)resp.set(h.guardOf,(resp.get(h.guardOf)||0)+1);
+ for(const c of G.units){if(c.dead||c.kind!=='cavalry')continue;
+  let a=c.tgt&&!c.tgt.dead&&c.tgt.isU&&c.tgt.kind==='archer'&&c.tgt.team!==c.team&&Math.hypot(c.x-c.tgt.x,c.y-c.tgt.y)<GUARD.threat*3?c.tgt:null;
+  if(!a)for(const u of G.units){if(u.dead||u.team===c.team||u.kind!=='archer')continue;if(Math.abs(u.x-c.x)<GUARD.threat&&Math.abs(u.y-c.y)<GUARD.threat&&Math.hypot(u.x-c.x,u.y-c.y)<GUARD.threat){a=u;break;}}
+  if(!a)continue;let need=GUARD.max-(resp.get(c)||0);if(need<=0)continue;
+  const cand=[];for(const h of G.units){if(h.team!==a.team||h.kind!=='hoplite'||!guardOK(h))continue;const da=Math.hypot(h.x-a.x,h.y-a.y);if(da>GUARD.r)continue;
+   const dc=Math.hypot(h.x-c.x,h.y-c.y);if(h.phx&&dc>GUARD.phxR)continue;cand.push([dc,h]);}
+  cand.sort((x,y)=>x[0]-y[0]);
+  for(const [,h] of cand.slice(0,need)){const st=h.st;
+   h.gPrev={st,tx:h.tx,ty:h.ty,wave:h.wave,hx:st==='move'&&h.soft?h.tx:(st==='attack'&&h.hx!==undefined?h.hx:h.x),hy:st==='move'&&h.soft?h.ty:(st==='attack'&&h.hy!==undefined?h.hy:h.y)};
+   h.guardOf=c;h.gArch=a;h.hx=h.gPrev.hx;h.hy=h.gPrev.hy;h.tgt=c;h.st='attack';h.auto=true;h.soft=false;h.amove=false;h.cmd=false;resp.set(c,(resp.get(c)||0)+1);}}}
+/* ==== ARCHER GUARD v1 END ==== */
+function step(dt){if(!G)return;G.t+=dt;pathBudget=10;G.dt=dt;if(gridDirty)rebuildGrid();saTick(dt);/* STEP ASIDE v1 */guardTick(dt);/* ARCHER GUARD v1 */
  updPhalanx();updHeroes(dt);for(const u of G.units)updU(u,dt);for(const b of G.blds)updB(b,dt);updProj(dt);separate();updForms(dt);updAI(dt);
  for(const f of G.fx)f.t+=dt;G.fx=G.fx.filter(f=>f.t<0.8);
  if(G.units.some(u=>u.dead)||G.blds.some(b=>b.dead)||G.res.some(r=>r.dead)){
@@ -912,6 +1001,7 @@ function command(wx,wy,t){
  const fx=Math.cos(ang),fy=Math.sin(ang),px=-fy,py=fx;
  others.forEach((u,i)=>{const c=i%cols-(cols-1)/2,r=Math.floor(i/cols);u.st='move';u.amove=false;u.tgt=null;u.auto=false;u.soft=false;u.hx=undefined;u.cmd=false;u.holdFight=false;
   u.tx=wx+px*c*sp-fx*r*sp;u.ty=wy+py*c*sp-fy*r*sp;});
+ if(!(G.formOn&&others.filter(u=>u.kind!=='helot').length>=4))saAssign(others,fx,fy);/* STEP ASIDE v1 (formation marches pick slots by position already) */
  const sol=others.filter(u=>u.kind!=='helot');
  if(G.formOn&&sol.length>=4){makeForm(sol,0,cx,cy,wx,wy,{form:false,ahead:true,arriveR:3,onRelease:(u)=>{u.st='move';u.soft=false;}});
   /* block starts level with its most-forward unit, slow-walks until stragglers close in, then marches at the slowest unit's pace */}
@@ -1362,7 +1452,7 @@ resize();requestAnimationFrame(frame);
 /* ==== UPDATE CHECK v1 BEGIN: js ==== BUILD_ID is stamped by update.sh at publish ('dev' = unpublished copy: no checks).
  Fetches version.json (no-store, cache-busted) on load, every 3 min and when the tab becomes visible. Any failure = silently nothing.
  Never reloads by itself: a tap on the banner reloads with ?v=<build>; ✕ hides it until a newer build appears. */
-const BUILD_ID='20261124-2038-2392d14a';
+const BUILD_ID='20261124-2104-b68b86a2';
 const UPD={build:BUILD_ID,remote:null,every:180000,timer:null,
  url(){return /github\.io$/.test(location.hostname)?'./version.json':'https://fatherjosh-game.github.io/spartan-rts/version.json';},
  reload(u){location.replace(u);},

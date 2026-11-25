@@ -123,6 +123,14 @@ body:not(.watch) #wbar{display:none!important}
 #watchOv .row button.on{background:var(--red);color:#fff;box-shadow:0 0 0 3px #ffd98a}
 #watchOv .row.blue button.on{background:#1d4f8a}
 #endMenuBtn{background:#444}
+/* ==== UPDATE CHECK v1 BEGIN: css ==== small banner just under the top bar, above menus, never blocks play */
+#updBar{position:fixed;left:50%;transform:translateX(-50%);top:calc(34px + env(safe-area-inset-top));z-index:30;display:none;align-items:center;gap:6px;
+ max-width:calc(100% - 16px);background:#2a1a10f2;color:#f1e2c0;border:2px solid #ffd98a;border-radius:18px;padding:3px 4px 3px 12px;font:600 13px/1.25 Georgia,serif;box-shadow:0 3px 10px #0009}
+#updBar.on{display:flex}#updGo{all:unset;cursor:pointer;padding:4px 2px;text-align:center}#updGo small{font-weight:400;opacity:.8}
+#updX{all:unset;cursor:pointer;width:26px;height:26px;border-radius:50%;text-align:center;line-height:26px;background:#5a3b22;font-size:13px;flex:none}
+body.pc #updBar{font-size:calc(13px * var(--ui,1));top:calc(44px * var(--ui,1));border-radius:calc(18px * var(--ui,1));padding:calc(3px * var(--ui,1)) calc(4px * var(--ui,1)) calc(3px * var(--ui,1)) calc(12px * var(--ui,1))}
+body.pc #updX{width:calc(26px * var(--ui,1));height:calc(26px * var(--ui,1));line-height:calc(26px * var(--ui,1));font-size:calc(13px * var(--ui,1))}
+/* ==== UPDATE CHECK v1 END: css ==== */
 /* ==== TUTORIAL v1 BEGIN: css ==== small non-blocking tip card, placed by JS between the side buttons, above the panel */
 #tutBtn{background:#2f5a2a}
 #tip{position:fixed;left:50%;transform:translateX(-50%);z-index:6;display:none;align-items:flex-start;gap:8px;max-width:min(420px,calc(100% - 24px));
@@ -163,7 +171,7 @@ body.pc #tip .tn{font-size:calc(11px * var(--ui,1))}body.pc #tip button{width:ca
  <button data-side="home">Home<span class="k">Space</span></button>
 </div>
 <div id="filt" class="hidden"></div><div id="grpBar"></div><div id="bottom"><button id="panT" aria-label="Hide or show the selection panel">▾</button><div id="info"></div><div id="acts"></div></div>
-<div id="toast"></div><div id="tip"><div id="tipT"></div><button id="tipX" title="Next tip">✕</button></div>
+<div id="toast"></div><div id="updBar" role="status"><button id="updGo">⚔ New version available, tap to refresh</button><button id="updX" title="Dismiss">✕</button></div><div id="tip"><div id="tipT"></div><button id="tipX" title="Next tip">✕</button></div>
 
 <div id="start" class="ov"><div class="panel">
  <div class="shield">Λ</div>
@@ -1351,7 +1359,32 @@ $('tutBtn').onclick=()=>{watchMode=null;const k=diffKey;diffKey='easy';startGame
 $('pauseBtn').onclick=()=>{if(!running)return;paused=true;$('pauseDiff').textContent='Difficulty: '+G.cfg.name+' · Wave '+G.wave;$('pause').classList.remove('hidden');};
 $('resumeBtn').onclick=()=>{paused=false;$('pause').classList.add('hidden');surReset();/* END MENU v1 */};
 resize();requestAnimationFrame(frame);
-window.SPARTA={fallBack:()=>fallBack(),filterSel:k=>filterSel(k),heroUnit:t=>heroUnit(t),heroAbility:h=>heroAbility(h),heroBlocked:t=>heroBlocked(t),selectHero:()=>selectHero(),useHeroAbility:()=>useHeroAbility(),startWatch,toMenu,surrender:()=>surrender(),kill:t=>kill(t),validPlace:(k,x,y,t)=>validPlace(k,x,y,t),PLACE_GAP,tutStart:()=>tutStart(),tutNext:()=>tutNext(),TUT,get running(){return running;},get paused(){return paused;},get diffKey(){return diffKey;},get watchMode(){return watchMode;},setSpeed:v=>{if(G&&G.watch)G.speed=v;},pick:(x,y,m)=>pick(x,y,m),TOUCH,VS,ZOOM_BOOST,get G(){return G;},render:()=>render(),addB:(...a)=>addB(...a),POP,ST:u=>ST(u),UPG,pickDiff:k=>pickDiff(k),step,addU:(...a)=>addU(...a),startGame,cam,command,onTap,trainKind,startPlace,tryPlace,selectArmy,updPanel,drawMini,pause:v=>paused=v};
+/* ==== UPDATE CHECK v1 BEGIN: js ==== BUILD_ID is stamped by update.sh at publish ('dev' = unpublished copy: no checks).
+ Fetches version.json (no-store, cache-busted) on load, every 3 min and when the tab becomes visible. Any failure = silently nothing.
+ Never reloads by itself: a tap on the banner reloads with ?v=<build>; ✕ hides it until a newer build appears. */
+const BUILD_ID='20261124-2038-2392d14a';
+const UPD={build:BUILD_ID,remote:null,every:180000,timer:null,
+ url(){return /github\.io$/.test(location.hostname)?'./version.json':'https://fatherjosh-game.github.io/spartan-rts/version.json';},
+ reload(u){location.replace(u);},
+ dismissed(){try{return localStorage.getItem('spartaUpdX')||'';}catch(_){return '';}},
+ async check(){if(UPD.build==='dev'||!/^https?:$/.test(location.protocol))return null;
+  try{const r=await fetch(UPD.url()+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;const j=await r.json();const b=j&&typeof j.build==='string'?j.build:null;
+   if(!b||b===UPD.build)return null;UPD.remote=b;if(UPD.dismissed()!==b)UPD.show();return b;}catch(_){return null;}},
+ show(){const bar=$('updBar');$('updGo').innerHTML=running&&G&&!G.over?'⚔ New version available, tap to refresh <small>(ends this match)</small>':'⚔ New version available, tap to refresh';bar.classList.add('on');UPD.place();requestAnimationFrame(UPD.place);},
+ place(){const bar=$('updBar');if(!bar.classList.contains('on'))return;const t=$('top').getBoundingClientRect(),top=Math.round((t.height>0?t.bottom:0)+4);bar.style.top=top+'px';
+  // sit in the free strip between the minimap (left) and the side buttons (right) instead of covering them
+  const run=!$('start')||$('start').classList.contains('hidden'),mi=$('mini').getBoundingClientRect(),sd=$('side').getBoundingClientRect();
+  let L=8,R=innerWidth-8;if(run){if(mi.width>0&&mi.top<top+70)L=mi.right+6;if(sd.width>0&&sd.top<top+70)R=sd.left-6;}
+  if(R-L<190){L=8;R=innerWidth-8;}bar.style.maxWidth=Math.round(R-L)+'px';bar.style.left=Math.round((L+R)/2)+'px';},
+ hide(){$('updBar').classList.remove('on');},
+ go(){if(!UPD.remote)return;const q=new URLSearchParams(location.search);q.set('v',UPD.remote);UPD.reload(location.pathname+'?'+q.toString()+location.hash);},
+ start(){if(UPD.build==='dev')return;setTimeout(UPD.check,2500);UPD.timer=setInterval(UPD.check,UPD.every);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')UPD.check();});addEventListener('resize',UPD.place);}};
+$('updGo').onclick=e=>{e.stopPropagation();UPD.go();};
+$('updX').onclick=e=>{e.stopPropagation();try{localStorage.setItem('spartaUpdX',UPD.remote||'');}catch(_){}UPD.hide();};
+UPD.start();
+/* ==== UPDATE CHECK v1 END: js ==== */
+window.SPARTA={upd:UPD,fallBack:()=>fallBack(),filterSel:k=>filterSel(k),heroUnit:t=>heroUnit(t),heroAbility:h=>heroAbility(h),heroBlocked:t=>heroBlocked(t),selectHero:()=>selectHero(),useHeroAbility:()=>useHeroAbility(),startWatch,toMenu,surrender:()=>surrender(),kill:t=>kill(t),validPlace:(k,x,y,t)=>validPlace(k,x,y,t),PLACE_GAP,tutStart:()=>tutStart(),tutNext:()=>tutNext(),TUT,get running(){return running;},get paused(){return paused;},get diffKey(){return diffKey;},get watchMode(){return watchMode;},setSpeed:v=>{if(G&&G.watch)G.speed=v;},pick:(x,y,m)=>pick(x,y,m),TOUCH,VS,ZOOM_BOOST,get G(){return G;},render:()=>render(),addB:(...a)=>addB(...a),POP,ST:u=>ST(u),UPG,pickDiff:k=>pickDiff(k),step,addU:(...a)=>addU(...a),startGame,cam,command,onTap,trainKind,startPlace,tryPlace,selectArmy,updPanel,drawMini,pause:v=>paused=v};
 })();
 </script>
 </body>

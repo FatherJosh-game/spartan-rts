@@ -1539,7 +1539,7 @@ function gfxURS(SC){return Math.min(5,Math.max(1,Math.ceil(DPR*cam.z*SC-.15)));}
 // extra height (local units, before SC) of each figure above the old (r+7) HP-bar line
 const gfxUTopK={helot:1,hoplite:5,archer:3,cavalry:13,leonidas:7,pericles:5};
 function gfxUTop(u,b){return gfxUSpr?(b+(gfxUTopK[u.kind]||0))/* ==== GFX RENDER BEGIN: tilt-utop ==== *//gfxT()/* ==== GFX RENDER END ==== */:b;}
-function gfxFig(g,kind,team,A,r){const T=gfxUT,dx=Math.cos(A),dy=Math.sin(A),c=TC[team],dk=TC2[team];
+function gfxFig(g,kind,team,A,r){/* GFX ANIM v1 */const AN=gfxAnimPose(r);const T=gfxUT,dx=Math.cos(A),dy=Math.sin(A),c=TC[team],dk=TC2[team];
  // ground offset along facing (f) / left hand (l), height h -> sprite coords
  const P=(f,l,h)=>[f*dx+l*dy,(f*dy-l*dx)*T-h];const D=(f,l)=>f*dy-l*dx; // depth (ground y)
  const parts=[];const add=(d,fn)=>parts.push([d,parts.length,fn]);
@@ -1550,8 +1550,8 @@ function gfxFig(g,kind,team,A,r){const T=gfxUT,dx=Math.cos(A),dy=Math.sin(A),c=T
  const SKIN='#d2a679',SKD='#a87a50',CRE=kind==='leonidas'?'#ffd700':team?'#e8e0c8':'#d8231d';
  // a standing person: legs, skirt, torso, head (helmet/cap/hair) — body centred on the given ground offset
  const person=(o)=>{const f0=o.f||0,l0=o.l||0,hb=o.hb||0,lc=o.legs;
-  if(lc)for(const s of [-1,1]){add(D(f0,l0+s*.16*r)-.01,()=>{line(P(f0,l0+s*.16*r,hb),P(f0,l0+s*.13*r,hb+.55*r),.2*r,lc);ell(P(f0+.05*r,l0+s*.16*r,hb),.11*r,.06*r,'#3a2a1a');});}
-  add(D(f0,l0),()=>{const p=P(f0,l0,hb+.62*r),q=P(f0,l0,hb+1.0*r),w=o.w||.36*r;
+  if(lc)for(const s of [-1,1]){/* GFX ANIM v1 */const L=gfxAnimLeg(AN,s,r);add(D(f0+L.fo,l0+s*.16*r)-.01,()=>{gfxPoly(g,[P(f0+L.fo,l0+s*.16*r,hb+L.lift),P(f0+L.fo*.45+L.kn,l0+s*.145*r,hb+.28*r+L.lift*.6+AN.Bb*.5),P(f0+L.fo*.1,l0+s*.13*r,hb+.55*r+AN.Bb)],.2*r,lc);ell(P(f0+L.fo+.05*r,l0+s*.16*r,hb+L.lift),.11*r,.06*r,'#3a2a1a');});}
+  add(D(f0,l0),()=>{/* GFX ANIM v1 */const hb2=hb+(o.bob!=null?o.bob:AN.Bb),p=P(f0,l0,hb2+.62*r),q=P(f0,l0,hb2+1.0*r),w=o.w||.36*r;
    // skirt (trapezoid) + torso
    g.fillStyle=o.skirt;g.beginPath();g.moveTo(p[0]-w*.95,p[1]+.12*r);g.lineTo(p[0]+w*.95,p[1]+.12*r);g.lineTo(p[0]+w*.75,p[1]-.2*r);g.lineTo(p[0]-w*.75,p[1]-.2*r);g.closePath();g.fill();
    g.fillStyle=lg(q[0]-w,q[0]+w,o.torsoL,o.torso);g.beginPath();g.ellipse(q[0],q[1],w,.36*r,0,0,7);g.fill();
@@ -1559,7 +1559,7 @@ function gfxFig(g,kind,team,A,r){const T=gfxUT,dx=Math.cos(A),dy=Math.sin(A),c=T
    if(o.chest){g.fillStyle='rgba(255,240,200,.35)';g.beginPath();g.ellipse(q[0]-w*.35,q[1]-.08*r,w*.35,.18*r,0,0,7);g.fill();}
    // arms (simple shoulders)
    ell([q[0]-w*.95,q[1]-.12*r],.13*r,.2*r,o.arm||SKIN);ell([q[0]+w*.95,q[1]-.12*r],.13*r,.2*r,o.arm||SKIN);
-   const hd=P(f0,l0,hb+1.48*r),hr=o.hr||.26*r;o.head(hd,hr);});};
+   const hd=P(f0,l0,hb2+1.48*r),hr=o.hr||.26*r;o.head(hd,hr);});};
  const helmet=(hd,hr,crest,gold)=>{ell(hd,hr,hr*1.05,lg(hd[0]-hr,hd[0]+hr,gold?'#ffe9a0':'#f0cf82',gold?'#b8860b':'#9c7430'));
   if(front){const ex=hd[0]+dx*hr*.45;g.fillStyle='#2a1c10';g.fillRect(ex-hr*.55*(.4+.6*Math.abs(dy)),hd[1]-hr*.15,hr*1.1*(.4+.6*Math.abs(dy)),hr*.22);g.fillRect(ex-hr*.08,hd[1]-hr*.1,hr*.16,hr*.6);}
   if(crest){// horse-hair crest running front-to-back over the helmet
@@ -1569,12 +1569,12 @@ function gfxFig(g,kind,team,A,r){const T=gfxUT,dx=Math.cos(A),dy=Math.sin(A),c=T
  if(K==='hoplite'){const R=.62*r*(hero?1.05:1);
   person({legs:'#b08a3a',skirt:dk,torso:'#a8782c',torsoL:'#e8c06a',chest:1,arm:SKIN,w:.36*r,head:(hd,hr)=>helmet(hd,hr,CRE,hero)});
   // cloak behind
-  add(D(-.25*r,0),()=>{const a=P(-.25*r,0,1.3*r),b=P(-.3*r,0,.35*r);g.fillStyle=lg(a[0]-.4*r,a[0]+.4*r,c,dk);g.beginPath();g.moveTo(a[0]-.38*r,a[1]);g.lineTo(a[0]+.38*r,a[1]);g.lineTo(b[0]+.48*r,b[1]);g.lineTo(b[0]-.48*r,b[1]);g.closePath();g.fill();});
+  add(D(-.25*r,0),()=>{const a=P(-.25*r,0,1.3*r+AN.Bb),b=P(-.3*r-AN.cl,0,.35*r+AN.Bb*.4);/* GFX ANIM v1 */g.fillStyle=lg(a[0]-.4*r,a[0]+.4*r,c,dk);g.beginPath();g.moveTo(a[0]-.38*r,a[1]);g.lineTo(a[0]+.38*r,a[1]);g.lineTo(b[0]+.48*r,b[1]);g.lineTo(b[0]-.48*r,b[1]);g.closePath();g.fill();});
   // spear (right hand, overhand)
-  const sa=P(-1.0*r,-.36*r,1.62*r),sb=P(2.0*r,-.36*r,1.12*r);add(D(.5*r,-.36*r),()=>{line(sa,sb,.12*r,'#5a3b1e');const ux=sb[0]-sa[0],uy=sb[1]-sa[1],n=Math.hypot(ux,uy)||1;
+  const sa=P(-1.0*r,-.36*r,1.62*r+AN.Bb-AN.sp*.35),sb=P(2.0*r,-.36*r,1.12*r+AN.Bb+AN.sp);/* GFX ANIM v1 */add(D(.5*r,-.36*r),()=>{line(sa,sb,.12*r,'#5a3b1e');const ux=sb[0]-sa[0],uy=sb[1]-sa[1],n=Math.hypot(ux,uy)||1;
    g.fillStyle='#d8dde2';g.beginPath();g.moveTo(sb[0]+ux/n*.38*r,sb[1]+uy/n*.38*r);g.lineTo(sb[0]-uy/n*.1*r,sb[1]+ux/n*.1*r);g.lineTo(sb[0]+uy/n*.1*r,sb[1]-ux/n*.1*r);g.closePath();g.fill();});
   // round shield (aspis) on the left arm, in front
-  const sc=P(.36*r,.26*r,.98*r),vis=.5+.5*Math.abs(dy);add(D(.36*r,.26*r)+.02,()=>{const rx=R*vis,inner=dy<-.3;
+  const sc=P(.36*r+AN.sw,.26*r,.98*r+AN.Bb),/* GFX ANIM v1 */vis=.5+.5*Math.abs(dy);add(D(.36*r,.26*r)+.02,()=>{const rx=R*vis,inner=dy<-.3;
    g.fillStyle=inner?lg(sc[0]-rx,sc[0]+rx,'#8a6238','#5a3b1e'):lg(sc[0]-rx,sc[0]+rx,c,dk);g.beginPath();g.ellipse(sc[0],sc[1],rx,R,0,0,7);g.fill();
    g.strokeStyle=hero?'#ffd700':BRZ;g.lineWidth=.13*r;g.stroke();
    if(!inner&&vis>.62){g.save();g.translate(sc[0],sc[1]);g.scale(vis,1);gfxEmb(g,team,0,0,R*.55);g.restore();}
@@ -1585,42 +1585,43 @@ function gfxFig(g,kind,team,A,r){const T=gfxUT,dx=Math.cos(A),dy=Math.sin(A),c=T
     else{// pointed (Scythian) cap, tip bent backwards
      g.fillStyle=lg(hd[0]-hr,hd[0]+hr,'#9a7650','#6a4a2a');g.beginPath();g.moveTo(hd[0]-hr*1.05,hd[1]-hr*.05);g.quadraticCurveTo(hd[0]-dx*hr*.2,hd[1]-hr*2.3,hd[0]-dx*hr*1.1,hd[1]-hr*2.0);g.quadraticCurveTo(hd[0]+hr*.3,hd[1]-hr*1.3,hd[0]+hr*1.05,hd[1]-hr*.05);g.closePath();g.fill();
      g.fillStyle=c;g.fillRect(hd[0]-hr*1.05,hd[1]-hr*.25,hr*2.1,hr*.28);}}});
-  if(hero)add(D(-.25*r,0),()=>{const a=P(-.25*r,0,1.3*r),b=P(-.3*r,0,.3*r);g.fillStyle=lg(a[0]-.4*r,a[0]+.4*r,'#f4f0e4','#c8c0a8');g.beginPath();g.moveTo(a[0]-.34*r,a[1]);g.lineTo(a[0]+.34*r,a[1]);g.lineTo(b[0]+.44*r,b[1]);g.lineTo(b[0]-.44*r,b[1]);g.closePath();g.fill();});
+  if(hero)add(D(-.25*r,0),()=>{const a=P(-.25*r,0,1.3*r+AN.Bb),b=P(-.3*r-AN.cl,0,.3*r+AN.Bb*.4);/* GFX ANIM v1 */g.fillStyle=lg(a[0]-.4*r,a[0]+.4*r,'#f4f0e4','#c8c0a8');g.beginPath();g.moveTo(a[0]-.34*r,a[1]);g.lineTo(a[0]+.34*r,a[1]);g.lineTo(b[0]+.44*r,b[1]);g.lineTo(b[0]-.44*r,b[1]);g.closePath();g.fill();});
   // quiver on the back
-  add(D(-.28*r,-.1*r),()=>{const a=P(-.28*r,-.1*r,.7*r),b=P(-.32*r,-.18*r,1.62*r);line(a,b,.24*r,'#6b4423','butt');g.fillStyle='#f0e8d8';for(const k of [-1,0,1]){g.beginPath();g.arc(b[0]+k*.08*r,b[1]-.08*r,.07*r,0,7);g.fill();}g.fillStyle=c;g.beginPath();g.arc(b[0],b[1]-.12*r,.06*r,0,7);g.fill();});
+  add(D(-.28*r,-.1*r),()=>{const a=P(-.28*r,-.1*r,.7*r+AN.Bb),b=P(-.32*r,-.18*r,1.62*r+AN.Bb+AN.sp*.5);/* GFX ANIM v1 */line(a,b,.24*r,'#6b4423','butt');g.fillStyle='#f0e8d8';for(const k of [-1,0,1]){g.beginPath();g.arc(b[0]+k*.08*r,b[1]-.08*r,.07*r,0,7);g.fill();}g.fillStyle=c;g.beginPath();g.arc(b[0],b[1]-.12*r,.06*r,0,7);g.fill();});
   // tall bow in the left hand, bulging forward
-  const bc=P(.48*r,.3*r,1.05*r);add(D(.48*r,.3*r)+.02,()=>{const H=.78*r,bx=dx*.42*r+(Math.abs(dx)<.35?.26*r:0)*(dx>=0?1:1),by=dy*.42*r*T;
+  const bc=P(.48*r+AN.sw,.3*r,1.05*r+AN.Bb+AN.sp*.4);/* GFX ANIM v1 */add(D(.48*r,.3*r)+.02,()=>{const H=.78*r,bx=dx*.42*r+(Math.abs(dx)<.35?.26*r:0)*(dx>=0?1:1),by=dy*.42*r*T;
    g.strokeStyle='#6b3e1a';g.lineWidth=.15*r;g.lineCap='round';g.beginPath();g.moveTo(bc[0],bc[1]-H);g.quadraticCurveTo(bc[0]+bx*2,bc[1]+by*2,bc[0],bc[1]+H);g.stroke();
    g.strokeStyle='#efe4c8';g.lineWidth=.05*r;g.beginPath();g.moveTo(bc[0],bc[1]-H);g.lineTo(bc[0],bc[1]+H);g.stroke();});}
  else if(K==='helot'){
   person({legs:SKIN,skirt:'#6e5232',torso:'#8a6a42',torsoL:'#b08a5a',belt:c,w:.34*r,head:(hd,hr)=>{ell(hd,hr,hr,lg(hd[0]-hr,hd[0]+hr,SKIN,SKD));
    g.fillStyle='#4a3420';g.beginPath();g.ellipse(hd[0],hd[1]-hr*.35,hr*1.08,hr*.72,0,Math.PI,0);g.closePath();g.fill();}});
   // mattock over the right shoulder
-  const ta=P(-.55*r,-.34*r,.55*r),tb=P(.35*r,-.34*r,1.85*r);add(D(-.1*r,-.34*r),()=>{line(ta,tb,.12*r,'#7a5230');const ux=tb[0]-ta[0],uy=tb[1]-ta[1],n=Math.hypot(ux,uy)||1;
+  const ta=P(-.55*r,-.34*r,.55*r+AN.Bb),tb=P(.35*r,-.34*r,1.85*r+AN.Bb+AN.sp);/* GFX ANIM v1 */add(D(-.1*r,-.34*r),()=>{line(ta,tb,.12*r,'#7a5230');const ux=tb[0]-ta[0],uy=tb[1]-ta[1],n=Math.hypot(ux,uy)||1;
    line([tb[0]-uy/n*.42*r,tb[1]+ux/n*.42*r],[tb[0]+uy/n*.3*r,tb[1]-ux/n*.3*r],.14*r,'#9aa0a6');});}
  else{// cavalry: horse (capsule body projected per facing) + taller rider
   const HC='#7a4e28',HL='#9a6a3c',HD='#4a2e17';
-  for(const [fl,ll] of [[.62,.2],[.62,-.2],[-.62,.2],[-.62,-.2]])add(D(fl*r,ll*r)-.02,()=>{line(P(fl*r,ll*r,0),P(fl*r,ll*r,.72*r),.14*r,HD);ell(P(fl*r+.04*r,ll*r,0),.09*r,.05*r,'#222');});
-  add(D(-1.0*r,0),()=>{line(P(-.88*r,0,.95*r),P(-1.15*r,0,.42*r),.14*r,'#2e1d0e');});
-  add(D(0,0),()=>{const a=P(-.85*r,0,.86*r),b=P(.78*r,0,.9*r);line(a,b,.62*r,HC);
+  /* GFX ANIM v1 */const Hb=f=>AN.on?AN.hb+AN.pt*f/r:0,Q=(f,l,h)=>P(f,l,h+Hb(f));let li=0;for(const [fl,ll] of [[.62,.2],[.62,-.2],[-.62,.2],[-.62,-.2]]){const L=gfxAnimHoof(AN,li++,fl,r);add(D(fl*r+L.fo,ll*r)-.02,()=>{gfxPoly(g,[P(fl*r+L.fo,ll*r,L.lift),P(fl*r+L.fo*.5+L.kn,ll*r,.36*r+L.lift*.5+Hb(fl*r)*.5),Q(fl*r,ll*r,.72*r)],.14*r,HD);ell(P(fl*r+L.fo+.04*r,ll*r,L.lift),.09*r,.05*r,'#222');});}
+  add(D(-1.0*r,0),()=>{line(Q(-.88*r,0,.95*r),Q(-1.15*r-AN.cl,0,.42*r+AN.cl*.6),.14*r,'#2e1d0e');});
+  add(D(0,0),()=>{const a=Q(-.85*r,0,.86*r),b=Q(.78*r,0,.9*r);line(a,b,.62*r,HC);
    line([a[0],a[1]-.13*r],[b[0],b[1]-.13*r],.24*r,HL);
    // team saddle cloth
-   const s0=P(-.32*r,0,.98*r),s1=P(.22*r,0,.98*r);line(s0,s1,.6*r,c,'butt');line([s0[0],s0[1]+.27*r],[s1[0],s1[1]+.27*r],.07*r,BRZ,'butt');});
-  add(D(1.1*r,0)+.01,()=>{const n0=P(.68*r,0,1.0*r),n1=P(1.12*r,0,1.48*r),h1=P(1.5*r,0,1.22*r);line(n0,n1,.34*r,HC);line([n0[0]-.04*r,n0[1]-.12*r],[n1[0]-.04*r,n1[1]-.12*r],.12*r,'#2e1d0e');
+   const s0=Q(-.32*r,0,.98*r),s1=Q(.22*r,0,.98*r);line(s0,s1,.6*r,c,'butt');line([s0[0],s0[1]+.27*r],[s1[0],s1[1]+.27*r],.07*r,BRZ,'butt');});
+  add(D(1.1*r,0)+.01,()=>{const n0=Q(.68*r,0,1.0*r),n1=Q(1.12*r,0,1.48*r+AN.nd*.5),h1=Q(1.5*r,0,1.22*r+AN.nd);line(n0,n1,.34*r,HC);line([n0[0]-.04*r,n0[1]-.12*r],[n1[0]-.04*r,n1[1]-.12*r],.12*r,'#2e1d0e');
    line(n1,h1,.24*r,HC);ell(n1,.06*r,.14*r,HD);});
   // rider sits above the horse's back: taller than any foot unit
-  person({f:-.05*r,hb:.62*r,skirt:dk,torso:c,torsoL:'#e8a090',chest:0,arm:SKIN,w:.3*r,hr:.24*r,head:(hd,hr)=>helmet(hd,hr,CRE,false)});
-  const la=P(-.7*r,-.34*r,1.55*r),lb=P(1.75*r,-.34*r,2.05*r);add(D(.6*r,-.34*r)+.03,()=>{line(la,lb,.1*r,'#5a3b1e');const ux=lb[0]-la[0],uy=lb[1]-la[1],n=Math.hypot(ux,uy)||1;
+  person({f:-.05*r,hb:.62*r+Hb(0)*.8,bob:AN.rb,skirt:dk,torso:c,torsoL:'#e8a090',chest:0,arm:SKIN,w:.3*r,hr:.24*r,head:(hd,hr)=>helmet(hd,hr,CRE,false)});
+  const la=Q(-.7*r,-.34*r,1.55*r+AN.rb),lb=Q(1.75*r,-.34*r,2.05*r+AN.rb+AN.sp);add(D(.6*r,-.34*r)+.03,()=>{line(la,lb,.1*r,'#5a3b1e');const ux=lb[0]-la[0],uy=lb[1]-la[1],n=Math.hypot(ux,uy)||1;
    g.fillStyle='#d8dde2';g.beginPath();g.moveTo(lb[0]+ux/n*.32*r,lb[1]+uy/n*.32*r);g.lineTo(lb[0]-uy/n*.08*r,lb[1]+ux/n*.08*r);g.lineTo(lb[0]+uy/n*.08*r,lb[1]-ux/n*.08*r);g.closePath();g.fill();});}
  parts.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);for(const p of parts)p[2]();}
-function gfxUSprite(kind,team,face,RS,lazy){const key=kind+'|'+team+'|'+face+'|'+RS;let sp=gfxUS.get(key);if(sp)return sp;
+function gfxUSprite(kind,team,face,RS,lazy,fr){/* GFX ANIM v1 */fr=fr||0;const sfx=fr?'|'+fr:'';const key=kind+'|'+team+'|'+face+'|'+RS+sfx;let sp=gfxUS.get(key);if(sp)return sp;
+ if(lazy&&fr&&gfxUBudget<2)return gfxUSprite(kind,team,face,RS,true,0); // at most 1 lazy walk-frame build per frame
  if(lazy&&gfxUBudget<=0){for(const d of [1,-1,2,-2,3,-3,4,-4]){const o=gfxUS.get(kind+'|'+team+'|'+face+'|'+(RS+d));if(o)return o;}return null;}
  gfxUBudget--;const r=UD[kind].r,A=face*Math.PI/4,X0=2.5*r,Y0=3.1*r,w=5*r,h=4.5*r,W=Math.ceil(w*RS),H=Math.ceil(h*RS);
  // crop box (local units, relative to the full 5r x 4.5r frame): measured once per kind/facing with getImageData (slow) and
  // reused, scaled, for every team and resolution, so later builds only allocate and fill the cropped area (fill rate on phones)
- const bk=kind+'|'+face,bb=gfxUBox.get(bk);let ox=0,oy=0,Wc=W,Hc=H;
+ const bk=kind+'|'+face+sfx,bb=gfxUBox.get(bk);let ox=0,oy=0,Wc=W,Hc=H;
  if(bb){ox=Math.max(0,Math.floor(bb[0]*RS)-2);oy=Math.max(0,Math.floor(bb[1]*RS)-2);Wc=Math.min(W,Math.ceil(bb[2]*RS)+2)-ox;Hc=Math.min(H,Math.ceil(bb[3]*RS)+2)-oy;}
- const F=gfxCv(Wc,Hc),fg=F.getContext('2d');fg.translate(-ox,-oy);fg.scale(RS,RS);fg.translate(X0,Y0);gfxFig(fg,kind,team,A,r);
+ const F=gfxCv(Wc,Hc),fg=F.getContext('2d');fg.translate(-ox,-oy);fg.scale(RS,RS);fg.translate(X0,Y0);gfxPose=fr?{ph:(fr-1)/GFX.animN,gallop:kind==='cavalry'}:null;gfxFig(fg,kind,team,A,r);gfxPose=null;
  // top-left light over the figure only
  fg.globalCompositeOperation='source-atop';fg.fillStyle=gfxLG(fg,-1.2*r,-2.4*r,1.2*r,.5*r,[0,'rgba(255,245,220,.2)',.5,'rgba(255,245,220,0)',1,'rgba(20,10,0,.2)']);fg.fillRect(-X0,-Y0,w,h);
  const O=gfxCv(Wc,Hc),og=O.getContext('2d');og.drawImage(F,0,0);og.globalCompositeOperation='source-in';og.fillStyle='rgba(28,18,8,.8)';og.fillRect(0,0,Wc,Hc);
@@ -1636,19 +1637,50 @@ function gfxUSprite(kind,team,face,RS,lazy){const key=kind+'|'+team+'|'+face+'|'
    const c2=gfxCv(Wc,Hc);c2.getContext('2d').drawImage(cv,-ox,-oy);cv.width=cv.height=0;cv=c2;}}
  sp={cv,X0:X0-ox/RS,Y0:Y0-oy/RS,w:cv.width/RS,h:cv.height/RS};gfxUS.set(key,sp);
  // memory: keep at most 2 resolutions per kind/team/facing (the nearest to the current one)
- const base=kind+'|'+team+'|'+face+'|',old=[];for(let q=1;q<=5;q++)if(q!==RS&&gfxUS.has(base+q))old.push(q);
- old.sort((a,b)=>Math.abs(b-RS)-Math.abs(a-RS));while(old.length>1)gfxUS.delete(base+old.shift());return sp;}
+ const base=kind+'|'+team+'|'+face+'|',old=[];for(let q=1;q<=5;q++)if(q!==RS&&gfxUS.has(base+q+sfx))old.push(q);
+ old.sort((a,b)=>Math.abs(b-RS)-Math.abs(a-RS));while(old.length>(fr?0:1))gfxUS.delete(base+old.shift()+sfx);return sp;}
 // leftover build budget pre-warms the current bucket for the four basic kinds (so turning/zooming rarely shows a fallback)
 const gfxUWK=['hoplite','archer','cavalry','helot'];let gfxUWi=0,gfxUWRS=0;
 function gfxUWarm(){if(!GFX.u25||LOD||gfxUBudget<=0)return;const RS=gfxURS(VS);if(RS>4)return;if(RS!==gfxUWRS){gfxUWRS=RS;gfxUWi=0;}
  gfxUBudget=1; // at most one pre-warm build per frame
- while(gfxUBudget>0&&gfxUWi<64){const i=gfxUWi++,k=gfxUWK[i>>4],t=(i>>3)&1,f=i&7;if(!gfxUS.has(k+'|'+t+'|'+f+'|'+RS))gfxUSprite(k,t,f,RS,false);}}
+ while(gfxUBudget>0&&gfxUWi<64*(GFX.anim?GFX.animN+1:1)){/* GFX ANIM v1 */const i=gfxUWi++,fr=i>>6,j=i&63,k=gfxUWK[j>>4],t=(j>>3)&1,f=j&7;if(!gfxUS.has(k+'|'+t+'|'+f+'|'+RS+(fr?'|'+fr:'')))gfxUSprite(k,t,f,RS,false,fr);}}
+/* ==== GFX ANIM v1 BEGIN ==== (2026-11-27, Josh: "legs moving back and forwards ... spears bobbing up and down when running")
+   Visual only: nothing here is read by gameplay. Each unit sprite gets 6 extra pre-rendered frames per kind/team/facing/resolution
+   (frame 0 = the old neutral sprite). Foot units: legs swing hip->knee->foot and lift on the forward swing, the body rises when the
+   legs pass each other, the spear/bow/mattock/quiver bob with a little lag, the shield arm swings, the cloak trails.
+   Cavalry: rotary-gallop legs, body rocks nose-up/nose-down, head nods, rider and lance bounce.
+   Phase advances with distance actually moved (so cadence follows speed: cavalry ~2.4 strides/s, foot ~1.9-2.3 steps/s),
+   starts at a per-unit golden-ratio offset (no lockstep), and on stopping it runs on quickly to the nearest legs-together pose,
+   then shows the neutral frame. Paused game = frozen pose (uses G.t). Walk frames are built lazily (at most 1 per frame) and pre-warmed when RS<=4;
+   a missing frame falls back to the neutral sprite. Walk frames keep only the current resolution bucket (memory); neutral sprites keep 2 as before.
+   GFX.anim=false turns it off at runtime (old bob comes back). */
+GFX.anim=true;GFX.animN=6;
+let gfxPose=null;const gfxAS=new WeakMap();
+const gfxAN0={on:0,ph:0,s2:0,c2:1,Bb:0,hb:0,pt:0,rb:0,sp:0,sw:0,cl:0,nd:0};
+function gfxAnimPose(r){const p=gfxPose;if(!p)return gfxAN0;const ph=p.ph,q=2*Math.PI*ph,s2=Math.sin(q),c2=Math.cos(q);
+ if(p.gallop)return {on:1,ph,s2,c2,Bb:0,hb:.08*r*(.5+.5*Math.sin(q)),pt:.09*r*Math.cos(q),rb:.05*r*(.5+.5*Math.sin(q-1.1)),sp:.12*r*Math.sin(q-.9),sw:0,cl:.1*r*(.5+.5*Math.sin(q+1)),nd:.08*r*Math.sin(q+.6)};
+ return {on:1,ph,s2,c2,Bb:.08*r*(.5+.5*Math.cos(2*q)),hb:0,pt:0,rb:0,sp:.1*r*Math.sin(2*q-.9),sw:-.07*r*s2,cl:.07*r*(.5+.5*Math.sin(2*q)),nd:0};}
+function gfxAnimLeg(AN,s,r){if(!AN.on)return {fo:0,lift:0,kn:0};const lift=Math.max(0,s*AN.c2)*.15*r;return {fo:s*AN.s2*.32*r,lift,kn:lift*.7+.02*r};}
+const gfxHoofOff=[0,.1,.55,.65];
+function gfxAnimHoof(AN,i,fl,r){if(!AN.on)return {fo:0,lift:0,kn:0};const q=2*Math.PI*(AN.ph+gfxHoofOff[i]),lift=Math.max(0,Math.cos(q))*.24*r;return {fo:.28*r*Math.sin(q),lift,kn:(fl>0?1:-1)*lift*.55};}
+function gfxPoly(g,pts,w,col){g.strokeStyle=col;g.lineWidth=w;g.lineCap='round';g.lineJoin='round';g.beginPath();g.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)g.lineTo(pts[i][0],pts[i][1]);g.stroke();}
+// per-unit walk phase from distance moved since the last draw (called once per drawn unit per frame; a second call in the same tick just repeats)
+function gfxAnimFr(u,K,SC){if(!GFX.anim)return 0;let s=gfxAS.get(u);const t=G.t;
+ if(!s){s={x:u.x,y:u.y,t,p:(u.id*.6180339887)%1,w:false,fr:0,idle:0};gfxAS.set(u,s);return 0;}
+ const d=Math.hypot(u.x-s.x,u.y-s.y),dt=t-s.t;s.x=u.x;s.y=u.y;s.t=t;if(dt<=0)return s.fr;
+ const stride=(K==='cavalry'?50:30)*SC;
+ if(d<60*SC&&((u.moving&&d>.01)||d>1.2*SC)){s.p=(s.p+d/stride)%1;s.w=true;s.idle=0;}
+ else if(s.w){s.idle+=dt;const h=s.p%.5,adv=dt*3;if(h+adv>=.5||s.idle>.35){s.w=false;s.p=(Math.floor(s.p*2)+1)/2%1;}else s.p+=adv;}
+ s.fr=s.w?1+Math.floor(s.p*GFX.animN+.5)%GFX.animN:0;return s.fr;}
+function gfxAnimBob(u,r){const s=gfxAS.get(u);if(!s||!s.fr||u.kind==='cavalry')return 0;return .08*r*(.5+.5*Math.cos(4*Math.PI*(s.fr-1)/GFX.animN));}
+GFX.animOf=u=>{const s=gfxAS.get(u);return s?{p:s.p,fr:s.fr,walking:s.w}:null;};GFX.uFrame=(k,t,f,RS,fr)=>gfxUSprite(k,t,f,RS,false,fr); // for tests / frame strips
+/* ==== GFX ANIM v1 END ==== */
 function gfxDrawU(u,K,r,a,isSel){gfxUSpr=false;if(!GFX.u25||LOD)return false;
- const kk=u.hero?u.kind:K,SC=VS*(u.hero?HVS:1),face=((Math.round(a/(Math.PI/4))%8)+8)%8,sp=gfxUSprite(kk,u.team,face,gfxURS(SC),true);if(!sp)return false;
- let ox=0,oy=r*.45;if(u.swing>0){ox+=Math.cos(a)*4;oy+=Math.sin(a)*4*gfxUT;}else if(u.moving)oy-=Math.abs(Math.sin(G.t*11+u.id))*1.2;
+ const kk=u.hero?u.kind:K,SC=VS*(u.hero?HVS:1),face=((Math.round(a/(Math.PI/4))%8)+8)%8,sp=gfxUSprite(kk,u.team,face,gfxURS(SC),true,gfxAnimFr(u,K,SC));if(!sp)return false;/* GFX ANIM v1 */
+ let ox=0,oy=r*.45;if(u.swing>0){ox+=Math.cos(a)*4;oy+=Math.sin(a)*4*gfxUT;}else if(u.moving&&!GFX.anim)oy-=Math.abs(Math.sin(G.t*11+u.id))*1.2;
  const x=ox-sp.X0,y=oy-sp.Y0;/* ==== GFX RENDER BEGIN: tilt-unit ==== */const gtk=gfxT();if(gtk!==1){ctx.save();ctx.translate(0,r*.5);ctx.scale(1,1/gtk);ctx.translate(0,-r*.5);}/* ==== GFX RENDER END ==== */ctx.drawImage(sp.cv,x,y,sp.w,sp.h);
  if(u.flash>0){const ga=ctx.globalAlpha;ctx.globalCompositeOperation='lighter';ctx.globalAlpha=ga*.45;ctx.drawImage(sp.cv,x,y,sp.w,sp.h);ctx.globalCompositeOperation='source-over';ctx.globalAlpha=ga;}
- if(u.kind==='helot'&&u.carry){ctx.fillStyle=u.ct==='food'?'#7a3d8a':u.ct==='wood'?'#7a5230':'#d58a2c';const bx=-Math.cos(a)*r*.45,by=oy-Math.sin(a)*r*.45*gfxUT-r*1.05;ctx.fillRect(bx-3,by-3,6,6);ctx.strokeStyle='rgba(30,20,10,.7)';ctx.lineWidth=1;ctx.strokeRect(bx-3,by-3,6,6);}
+ if(u.kind==='helot'&&u.carry){ctx.fillStyle=u.ct==='food'?'#7a3d8a':u.ct==='wood'?'#7a5230':'#d58a2c';const bx=-Math.cos(a)*r*.45,by=oy-Math.sin(a)*r*.45*gfxUT-r*1.05-gfxAnimBob(u,r);/* GFX ANIM v1 */ctx.fillRect(bx-3,by-3,6,6);ctx.strokeStyle='rgba(30,20,10,.7)';ctx.lineWidth=1;ctx.strokeRect(bx-3,by-3,6,6);}
  /* ==== GFX RENDER BEGIN: tilt-unit-end ==== */if(gtk!==1)ctx.restore();/* ==== GFX RENDER END ==== */
  // front half of the selection ring on top of the feet, so selection reads clearly in crowds
  if(isSel){ctx.strokeStyle=u.team?'#ff8080':'#7fff7f';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(0,r*.5,r+4,(r+4)*.55,0,.2,Math.PI-.2);ctx.stroke();}
@@ -1829,7 +1861,7 @@ resize();requestAnimationFrame(frame);
 /* ==== UPDATE CHECK v1 BEGIN: js ==== BUILD_ID is stamped by update.sh at publish ('dev' = unpublished copy: no checks).
  Fetches version.json (no-store, cache-busted) on load, every 3 min and when the tab becomes visible. Any failure = silently nothing.
  Never reloads by itself: a tap on the banner reloads with ?v=<build>; ✕ hides it until a newer build appears. */
-const BUILD_ID='20261127-1358-0213ced8';
+const BUILD_ID='20261127-1635-539dfeb2';
 const UPD={build:BUILD_ID,remote:null,every:180000,timer:null,
  url(){return /github\.io$/.test(location.hostname)?'./version.json':'https://fatherjosh-game.github.io/spartan-rts/version.json';},
  reload(u){location.replace(u);},
